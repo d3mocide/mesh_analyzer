@@ -1,10 +1,7 @@
 services:
   app:
-    build: .
+    image: ghcr.io/d3mocide/mesh-analyzer:latest
     container_name: mesh_analyzer_dev
     ports:
       - "5173:5173"
-    volumes:
-      - .:/app
-      - /app/node_modules
     command: npm run dev -- --host

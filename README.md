@@ -64,11 +64,17 @@ A modern, web-based RF simulation and link analysis tool designed for LoRa Mesh 
 
 ### Running with Docker (No Install)
 
-1.  Run the pre-built image from GHCR:
+**Option 1: Docker CLI**
 
-    ```bash
-    docker run -d -p 5173:5173 ghcr.io/d3mocide/mesh-analyzer:latest
-    ```
+```bash
+docker run -d -p 5173:5173 ghcr.io/d3mocide/mesh-analyzer:latest
+```
+
+**Option 2: Docker Compose**
+
+```bash
+docker-compose up -d
+```
 
 2.  Open `http://localhost:5173` in your browser.
 
