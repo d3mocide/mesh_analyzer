@@ -12,7 +12,7 @@
 
 ### Docker (Recommended)
 
-1. Run `docker run -d -p 5173:5173 ghcr.io/d3mocide/mesh-analyzer:latest`
+1. Run `docker run -d -p 5173:5173 ghcr.io/d3mocide/mesh_analyzer:latest`
 2. Access the app at `http://localhost:5173`.
 
 ### Manual

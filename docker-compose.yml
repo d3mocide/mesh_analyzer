@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/d3mocide/mesh-analyzer:latest
+    image: ghcr.io/d3mocide/mesh_analyzer:latest
     container_name: mesh_analyzer_dev
     ports:
       - "5173:5173"
