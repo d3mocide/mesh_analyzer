@@ -76,8 +76,8 @@ Sample Compose File
 ```yml
 services:
   app:
-    image: ghcr.io/d3mocide/Mesh_RF_Analyzer:latest
-    container_name: mesh_analyzer_dev
+    image: ghcr.io/d3mocide/mesh_rf_analyzer:latest
+    container_name: mesh_analyzer
     ports:
       - "5173:5173"
     environment:
