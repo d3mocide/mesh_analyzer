@@ -1,12 +1,12 @@
 # Release Notes - v0.2-rc
 
-## Mesh RF Analyzer - The Branding Update
+## MeshRF - The Branding Update
 
 This release brings a polished identity to the project and important configuration fixes for deployment.
 
 ### 🎨 Branding & Identity
 
-- **New Name**: Officially renamed to **Mesh RF Analyzer**.
+- **New Name**: Officially renamed to **MeshRF**.
 - **New Icon**: Added a sleek, cyber-aesthetic SVG icon (Gradient Hexagon).
 - **UI Updates**: Updated title in Browser Tab and Sidebar.
 

@@ -1,9 +1,10 @@
 services:
   app:
     image: ghcr.io/d3mocide/meshrf:latest
-    container_name: mesh_analyzer
+    container_name: meshrf
     ports:
       - "5173:5173"
     environment:
-      - ALLOWED_HOSTS=localhost #Add your hostname if using a reverse proxy
+    #Add your hostname if using behind a reverse proxy  
+      - ALLOWED_HOSTS=localhost
     command: npm run dev -- --host
