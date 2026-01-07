@@ -12,6 +12,9 @@ export const RFProvider = ({ children }) => {
     const [selectedRadioPreset, setSelectedRadioPreset] = useState('MESHCORE_PNW');
     const [selectedDevice, setSelectedDevice] = useState('HELTEC_V3');
     const [selectedAntenna, setSelectedAntenna] = useState('STUBBY');
+    
+    // Batch Processing
+    const [batchNodes, setBatchNodes] = useState([]); // Array of {id, name, lat, lng}
 
     // Config Values
     const [txPower, setTxPower] = useState(20);
@@ -21,6 +24,10 @@ export const RFProvider = ({ children }) => {
     // Preferences
     const [units, setUnits] = useState('metric'); // 'metric' or 'imperial'
     const [mapStyle, setMapStyle] = useState('dark'); // 'dark', 'light', 'topo', 'satellite'
+    
+    // Environmental
+    const [kFactor, setKFactor] = useState(1.33); // Standard Refraction
+    const [clutterHeight, setClutterHeight] = useState(0); // Forest/Urban Obstruction (m)
     
     // Radio Params
     const [freq, setFreq] = useState(RADIO_PRESETS.MESHCORE_PNW.freq);
@@ -69,6 +76,7 @@ export const RFProvider = ({ children }) => {
         selectedRadioPreset, setSelectedRadioPreset,
         selectedDevice, setSelectedDevice,
         selectedAntenna, setSelectedAntenna,
+        batchNodes, setBatchNodes,
         txPower, setTxPower,
         antennaHeight, setAntennaHeight,
         antennaGain, setAntennaGain,
@@ -79,7 +87,9 @@ export const RFProvider = ({ children }) => {
         cr, setCr,
         erp, cableLoss,
         units, setUnits,
-        mapStyle, setMapStyle
+        mapStyle, setMapStyle,
+        kFactor, setKFactor,
+        clutterHeight, setClutterHeight
     };
 
     return (

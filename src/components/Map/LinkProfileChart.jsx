@@ -10,9 +10,21 @@ const LinkProfileChart = ({ profileWithStats, width = 200, height = 100, units =
     const distUnit = isImperial ? 'mi' : 'km';
     const heightUnit = isImperial ? 'ft' : 'm';
 
-    // Determine scales (in native metric for drawing, converted for labels)
-    const minElev = Math.min(...profileWithStats.map(p => p.elevation));
-    const maxElev = Math.max(...profileWithStats.map(p => p.losHeight), ...profileWithStats.map(p => p.elevation));
+    let minElev = Math.min(
+        ...profileWithStats.map(p => p.effectiveTerrain),
+        ...profileWithStats.map(p => p.losHeight - p.f1Radius)
+    );
+    let maxElev = Math.max(
+        ...profileWithStats.map(p => p.losHeight + p.f1Radius), 
+        ...profileWithStats.map(p => p.effectiveTerrain)
+    );
+    
+    // Add margin to prevent clipping
+    const range = maxElev - minElev;
+    const padding = range * 0.1 || 10;
+    minElev -= padding;
+    maxElev += padding;
+
     const totalDist = profileWithStats[profileWithStats.length - 1].distance;
 
     // Label Values
@@ -20,7 +32,7 @@ const LinkProfileChart = ({ profileWithStats, width = 200, height = 100, units =
     const maxElevLabel = (maxElev * heightFactor).toFixed(0);
 
     // Padding
-    const p = 5;
+    const p = 10;
     const w = width - p * 2;
     const h = height - p * 2;
 
@@ -28,18 +40,26 @@ const LinkProfileChart = ({ profileWithStats, width = 200, height = 100, units =
     const scaleY = (e) => height - p - ((e - minElev) / (maxElev - minElev)) * h;
 
     // Generate Path Data
-    // 1. Terrain Polygon (filled)
-    let terrainPath = `M ${scaleX(0)} ${height}`; // Start bottom left
+    
+    let terrainPath = `M ${scaleX(0)} ${height}`; 
     profileWithStats.forEach(pt => {
-        terrainPath += ` L ${scaleX(pt.distance)} ${scaleY(pt.elevation)}`;
+        const elev = pt.effectiveTerrain !== undefined ? pt.effectiveTerrain : pt.elevation;
+        terrainPath += ` L ${scaleX(pt.distance)} ${scaleY(elev)}`;
     });
-    terrainPath += ` L ${scaleX(totalDist)} ${height} Z`; // Close to bottom right
+    terrainPath += ` L ${scaleX(totalDist)} ${height} Z`;
 
-    // 2. LOS Line
+    let bareEarthPath = "";
+    if (profileWithStats[0].earthBulge !== undefined) {
+         bareEarthPath = `M ${scaleX(0)} ${height}`;
+          profileWithStats.forEach((pt, i) => {
+             const ground = pt.elevation + pt.earthBulge;
+             const cmd = i === 0 ? 'M' : 'L';
+             bareEarthPath += `${cmd} ${scaleX(pt.distance)} ${scaleY(ground)}`;
+         });
+    }
+
     const losPath = `M ${scaleX(0)} ${scaleY(profileWithStats[0].losHeight)} L ${scaleX(totalDist)} ${scaleY(profileWithStats[profileWithStats.length - 1].losHeight)}`;
 
-    // 3. Fresnel Zone (Bottom) Line
-    // F1 Bottom = LOS - F1 Radius
     let f1Path = "";
     profileWithStats.forEach((pt, i) => {
         const f1Bottom = pt.losHeight - pt.f1Radius;
@@ -50,8 +70,11 @@ const LinkProfileChart = ({ profileWithStats, width = 200, height = 100, units =
     return (
         <div style={{ marginTop: '10px', background: '#0000', border: '1px solid #333', borderRadius: '4px' }}>
             <svg width={width} height={height}>
-                {/* Terrain */}
-                <path d={terrainPath} fill="#444" stroke="none" opacity="0.6" />
+                {/* Terrain (Effective - Includes Clutter) */}
+                <path d={terrainPath} fill="#5d4037" stroke="none" opacity="0.8" />
+                
+                {/* Bare Earth Line (if Geodetic enabled) */}
+                {bareEarthPath && <path d={bareEarthPath} fill="none" stroke="#8d6e63" strokeWidth="1" opacity="0.5" />}
                 
                 {/* Fresnel Zone Bottom Limit */}
                 <path d={f1Path} fill="none" stroke="#00f2ff" strokeWidth="1" strokeDasharray="3,3" opacity="0.5" />
@@ -59,10 +82,37 @@ const LinkProfileChart = ({ profileWithStats, width = 200, height = 100, units =
                 {/* LOS Line */}
                 <path d={losPath} fill="none" stroke="#00ff41" strokeWidth="2" />
 
-                {/* Axis Labels (Simplified) */}
-                <text x={p} y={height - 2} fill="#888" fontSize="8">0{distUnit}</text>
-                <text x={width - 25} y={height - 2} fill="#888" fontSize="8">{totalDistLabel}{distUnit}</text>
-                <text x={p} y={p + 8} fill="#888" fontSize="8">{maxElevLabel}{heightUnit}</text>
+                {/* Axis Labels (Improved Alignment) */}
+                <text 
+                    x={p} 
+                    y={height - 5} 
+                    fill="#ccc" 
+                    fontSize="10" 
+                    textAnchor="start" 
+                    style={{ textShadow: '0 0 3px #000' }}
+                >
+                    0{distUnit}
+                </text>
+                <text 
+                    x={width - p} 
+                    y={height - 5} 
+                    fill="#ccc" 
+                    fontSize="10" 
+                    textAnchor="end" 
+                    style={{ textShadow: '0 0 3px #000' }}
+                >
+                    {totalDistLabel}{distUnit}
+                </text>
+                <text 
+                    x={p} 
+                    y={p + 10} 
+                    fill="#ccc" 
+                    fontSize="10" 
+                    textAnchor="start" 
+                    style={{ textShadow: '0 0 3px #000' }}
+                >
+                    {maxElevLabel}{heightUnit}
+                </text>
             </svg>
         </div>
     );

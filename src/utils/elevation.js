@@ -37,9 +37,9 @@ export const fetchElevationPath = async (start, end, samples = 20) => {
             lngs.push(lng);
         }
 
-        // calls Open-Meteo Elevation API
-        // Format: https://api.open-meteo.com/v1/elevation?latitude=52.52,54.32&longitude=13.41,10.12
-        const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats.join(',')}&longitude=${lngs.join(',')}`;
+        // calls Open-Meteo Elevation API (or local mirror)
+        const baseUrl = import.meta.env.VITE_ELEVATION_API_URL || 'https://api.open-meteo.com/v1/elevation';
+        const url = `${baseUrl}?latitude=${lats.join(',')}&longitude=${lngs.join(',')}`;
         
         const response = await fetch(url);
         if (!response.ok) throw new Error('Elevation API Failed');

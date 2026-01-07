@@ -133,57 +133,109 @@ export const calculateFresnelPolygon = (p1, p2, freqMHz, steps = 30) => {
   return [...leftSide, ...rightSide];
 };
 
+
 /**
- * Analyze Link Profile for Obstructions
+ * Calculate Earth Bulge at a specific point
+ * @param {number} distKm - Distance from start point (km)
+ * @param {number} totalDistKm - Total link distance (km)
+ * @param {number} kFactor - Standard Refraction Factor (default 1.33)
+ * @returns {number} Bulge height in meters
+ */
+export const calculateEarthBulge = (distKm, totalDistKm, kFactor = 1.33) => {
+  // Earth Radius (km)
+  const R = 6371;
+  const Re = R * kFactor; // Effective Radius
+
+  // Distance to second point
+  const d1 = distKm;
+  const d2 = totalDistKm - distKm;
+
+  // h = (d1 * d2) / (2 * Re)
+  // Result in km, convert to meters
+  const hKm = (d1 * d2) / (2 * Re);
+  return hKm * 1000;
+};
+
+
+/**
+ * Analyze Link Profile for Obstructions (Geodetic + Clutter + Fresnel Standards)
  * @param {Array} profile - Array of {distance, elevation} points (distance in km, elevation in m)
  * @param {number} freqMHz - Frequency
  * @param {number} txHeightAGL - TX Antenna Height (m)
  * @param {number} rxHeightAGL - RX Antenna Height (m)
- * @returns {Object} { minClearance, isObstructed, profileWithStats }
+ * @param {number} kFactor - Atmospheric Refraction (default 1.33)
+ * @param {number} clutterHeight - Uniform Clutter Height (e.g., Trees/Urban) default 0
+ * @returns {Object} { minClearance, isObstructed, linkQuality, profileWithStats }
  */
-export const analyzeLinkProfile = (profile, freqMHz, txHeightAGL, rxHeightAGL) => {
+export const analyzeLinkProfile = (profile, freqMHz, txHeightAGL, rxHeightAGL, kFactor = 1.33, clutterHeight = 0) => {
   if (!profile || profile.length === 0) return { isObstructed: false, minClearance: 999 };
 
   const startPt = profile[0];
   const endPt = profile[profile.length - 1];
-  const totalDistKm = endPt.distance; // Assuming 0-based distance
+  const totalDistKm = endPt.distance; 
 
-  // Absolute Heights (AMSL - Above Mean Sea Level)
-  const txH = startPt.elevation + txHeightAGL;
+  const txH = startPt.elevation + txHeightAGL; 
   const rxH = endPt.elevation + rxHeightAGL;
 
   let minClearance = 9999;
   let isObstructed = false;
+  let worstFresnelRatio = 1.0; // 1.0 = Fully Clear. < 0.6 = Bad.
 
   const profileWithStats = profile.map(pt => {
     const d = pt.distance; // km
     
-    // Linear interpolation for LOS height (Flat Earth approximation for now)
+    // 1. Calculate Earth Bulge
+    const bulge = calculateEarthBulge(d, totalDistKm, kFactor);
+    
+    // 2. Effective Terrain Height (Terrain + Bulge + Clutter)
+    const effectiveTerrain = pt.elevation + bulge + clutterHeight;
+
+    // 3. LOS Height at this distance
     const ratio = d / totalDistKm;
     const losHeight = txH + (rxH - txH) * ratio;
 
-    // Fresnel Radius (m)
+    // 4. Fresnel Radius (m)
     const f1 = calculateFresnelRadius(totalDistKm, freqMHz, d);
 
-    // Clearance (m) = (LOS Height - Terrain Height) - F1 Radius
-    const clearance = (losHeight - pt.elevation) - f1;
+    // 5. Clearance (m) relative to F1 bottom
+    // Positive = Clear of F1. Negative = Inside F1 or Obstructed.
+    const distFromCenter = losHeight - effectiveTerrain;
+    const clearance = distFromCenter - f1;
     
+    // Ratio of Clearance / F1 Radius (for quality check)
+    // 60% rule means distFromCenter >= 0.6 * F1
+    const fRatio = f1 > 0 ? (distFromCenter / f1) : 1; 
+
+    if (fRatio < worstFresnelRatio) worstFresnelRatio = fRatio;
     if (clearance < minClearance) minClearance = clearance;
 
-    // Obstructed if clearance < 0 (encroaches F1)
-    if (clearance < 0) isObstructed = true;
+    // Obstructed logic
+    if (distFromCenter <= 0) isObstructed = true;
 
     return {
       ...pt,
+      earthBulge: bulge,
+      effectiveTerrain, 
       losHeight,
       f1Radius: f1,
-      clearance
+      clearance,
+      fresnelRatio: fRatio
     };
   });
+
+  // Determine Link Quality String
+  // Excellent (>0.8), Good (>0.6), Marginal (>0), Obstructed (<=0)
+  
+  let linkQuality = "Obstructed";
+  if (worstFresnelRatio >= 0.8) linkQuality = "Excellent (+++)";
+  else if (worstFresnelRatio >= 0.6) linkQuality = "Good (++)"; // 60% rule
+  else if (worstFresnelRatio > 0) linkQuality = "Marginal (+)"; // Visual LOS, but heavy Fresnel
+  else linkQuality = "Obstructed (-)"; // No Visual LOS
 
   return {
     minClearance: parseFloat(minClearance.toFixed(1)),
     isObstructed,
+    linkQuality,
     profileWithStats
   };
 };

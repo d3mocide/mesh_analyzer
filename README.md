@@ -1,45 +1,70 @@
-# MeshRF
+# meshRF 📡
 
-A modern, web-based RF simulation and link analysis tool designed for LoRa Mesh networks (Meshtastic, Reticulum, etc.). Built with React, Leaflet, and standard geospatial libraries.
+A professional-grade RF propagation and link analysis tool designed for LoRa Mesh networks (Meshtastic, Reticulum, Sidewinder). Built with **React**, **Leaflet**, and a high-fidelity **Geodetic Physics Engine**.
 
 ![Link Analysis Demo](./public/meshrf-preview.png)
 
-## Features
+## ✨ Features
 
-### 📡 Link Analysis
+### 📡 Advanced Link Analysis
 
-- **Point-to-Point Analysis**: Click any two points on the map to instantly calculate link feasibility.
-- **Link Budget Calculator**: Real-time RSSI, SNR, and Link Margin calculations based on TX power, antenna gain, and frequency.
-- **Fresnel Zone Visualization**: Visualizes the 1st Fresnel Zone to help identify obstructions.
-- **Line of Sight (LOS)**: Draws direct LOS paths with color-coding (Green/Yellow/Red) based on link quality.
+- **Geodetic Physics Engine**: Calculates **Earth Bulge** and effective terrain height based on link distance and configurable **K-Factor**.
+- **WISP-Grade Quality**: Evaluates links using the strict **60% Fresnel Zone Clearance** rule (Excellent/Good/Marginal/Obstructed).
+- **Multi-Variable Profile**: Visualizes Terrain, Earth Curvature, Line of Sight (LOS), and Fresnel Zones on a dynamic 2D chart.
+- **Clutter Awareness**: Simulates signal loss through trees or urban "clutter" layers.
 
-### 🏔️ Terrain Awareness
+### ⚡ Batch Operations
 
-- **Elevation Profiles**: Fetches global elevation data (via Open-Meteo) to generate accurate path profiles.
-- **Obstruction Detection**: Automatically detects terrain that blocks the LOS or encroaches on the Fresnel zone.
-- **3D-Like Topography**: "Google Terrain" style maps for intuitive planning.
+- **Bulk Link Matrix**: Import a simple CSV of nodes (`Name, Lat, Lon`) and instantly compute link budgets for every possible pair.
+- **Automated Reporting**: Export detailed CSV reports containing RSSI, Signal Margin, and Clearance values for hundreds of potential links.
 
-### 🛠️ Configurable Hardware
+### 🛠️ Hardware Simulation
 
-- **Device Presets**: Pre-configured profiles for popular hardware (Heltec V3, T-Beam, RAK4631, etc.).
-- **Antenna Options**: Select from standard antennas (Stubby, Dipole, Yagi) or enter custom gain.
-- **Radio Settings**: Adjust Spreading Factor (SF), Bandwidth (BW), and Coding Rate (CR) to simulate different LoRa config (LongFast, ShortFast, etc.).
+- **Device Presets**: Pre-loaded specs for popular mesh hardware (Heltec V3, T-Beam, RAK4631, Station G2).
+- **Radio Config**: Adjust Spreading Factor (SF), Bandwidth (BW), and Coding Rate (CR) to simulate real-world LoRa modulation (LongFast, ShortFast).
+- **Antenna Modeling**: Select standard antennas (Stubby, Dipole, Yagi) or input custom gain figures.
 
-### 🌍 Application Features metrics
+### 🎨 Modern Experience
 
-- **Unit Toggle**: Seamlessly switch between **Metric** (km/m) and **Imperial** (mi/ft).
-- **Map Themes**: One-click switching between Dark Mode, Light Mode, Topography, and Satellite layers.
-- **Responsive Design**: Clean, glassmorphism-inspired UI that works on desktop and tablets.
+- **Responsive UI**: "Glassmorphism" design with a collapsible sidebar and mobile-friendly drawer navigation.
+- **Dynamic Maps**: Seamlessly switch between **Dark Matter**, **Light**, **Topography**, and **Satellite** basemaps.
+- **Metric/Imperial**: Toggle between Metric (km/m) and Imperial (mi/ft) units on the fly.
 
-## Getting Started
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- **OR**
-- [Docker](https://www.docker.com/)
+- [Node.js](https://nodejs.org/) (v18+) **OR** [Docker](https://www.docker.com/)
 
-### Running Locally (Node.js)
+### 🐳 Running with Docker (Recommended)
+
+1. **Pull and Run**:
+
+   ```bash
+   docker run -d -p 5173:5173 ghcr.io/d3mocide/meshrf:latest
+   ```
+
+2. **Custom Configuration (Docker Compose)**:
+   You can configure the default map location and elevation source via environment variables.
+
+   ```yaml
+   services:
+     app:
+       image: ghcr.io/d3mocide/meshrf:latest
+       ports:
+         - "5173:5173"
+       environment:
+         - VITE_MAP_LAT=45.5152 # Default Latitude (Portland, OR)
+         - VITE_MAP_LNG=-122.6784 # Default Longitude
+         - VITE_ELEVATION_API_URL=https://api.open-meteo.com/v1/elevation
+         - ALLOWED_HOSTS=my-meshrf.com # For reverse proxies
+   ```
+
+3. Open `http://localhost:5173` in your browser.
+
+### 💻 Running Locally (Development)
 
 1.  Clone the repository:
 
@@ -54,75 +79,40 @@ A modern, web-based RF simulation and link analysis tool designed for LoRa Mesh 
     npm install
     ```
 
-3.  Start the development server:
-
+3.  Start the dev server:
     ```bash
     npm run dev
     ```
 
-4.  Open `http://localhost:5173` in your browser.
+---
 
-### Running with Docker (No Install)
+## 📐 Usage Guide
 
-**Option 1: Docker CLI**
+1.  **Placement**: Click on the map to place **TX** (Point A) and **RX** (Point B).
+    - _Tip: Click again to move points._
+2.  **Configuration**: Open the sidebar to select your specific device hardware and antenna height.
+3.  **Environment**: Adjust **Refraction (K)** for atmospheric conditions and **Clutter** (e.g., 10m for trees) to see real-world impact.
+4.  **Analysis**:
+    - **Green**: Good/Excellent Connection (>60% Fresnel Clearance).
+    - **Yellow**: Marginal (LOS exists but Fresnel is infringed).
+    - **Red**: Obstructed (Earth or Terrain blocking).
+5.  **Batch**: Use the "Import Nodes" button to upload a CSV and generate a full mesh network report.
 
-```bash
-docker run -d -p 5173:5173 ghcr.io/d3mocide/meshrf:latest
-```
+---
 
-**Option 2: Docker Compose**
+## 🏗️ Project Structure
 
-Sample Compose File
+- `src/components`: UI components (Map, Sidebar, Charts).
+- `src/context`: Global RF state and batch processing logic.
+- `src/utils`:
+  - `rfMath.js`: Core physics engine (Geodetic calc, Fresnel, Path Loss).
+  - `elevation.js`: DEM data fetching and processing.
+- `src/data`: Hardware definition libraries.
 
-```yml
-services:
-  app:
-    image: ghcr.io/d3mocide/meshrf:latest
-    container_name: meshrf
-    ports:
-      - "5173:5173"
-    environment:
-      #Add your hostnames if using behind a reverse proxy
-      - ALLOWED_HOSTS=localhost
-    command: npm run dev -- --host
-```
-
-```bash
-docker-compose up -d
-```
-
-_Note: You can configure `ALLOWED_HOSTS` in `docker-compose.yml` if accessing via a custom domain._
-
-2.  Open `http://localhost:5173` in your browser.
-
-## Usage Guide
-
-1.  **Place Nodes**: Click anywhere on the map to place your **TX** (Transmitter) node. Click again to place your **RX** (Receiver) node.
-2.  **Adjust Hardware**: Use the Sidebar to select your device (e.g., _Heltec V3_) and antenna height.
-3.  **Analyze**:
-    - **Green Line**: Clear Line of Sight with good signal margin.
-    - **Yellow Line**: Marginal connection or partial Fresnel obstruction.
-    - **Red Line**: Obstructed path or insufficient signal power.
-4.  **Check Profile**: Look at the top-right overlay to see the terrain cross-section and exact clearance values.
-
-## Technologies Used
-
-- **Vite + React**: Fast, modern frontend framework.
-- **Leaflet + React-Leaflet**: robust mapping library.
-- **Turf.js**: Advanced geospatial analysis.
-- **Open-Meteo API**: Free, open-source global elevation data.
-
-## Project Structure
-
-- `src/components`: UI blocks (Map, Sidebar, Panels).
-- `src/context`: Global state management (RF settings).
-- `src/utils`: Math engines for RF propagation and Elevation processing.
-- `src/data`: Config files for device and antenna presets.
-
-## License
+## 📄 License
 
 MIT License. Free to use and modify.
 
-## Disclaimer
+## ⚠️ Disclaimer
 
-This tool is provided as-is for educational and planning purposes only. This tool was created with Gemini 3.5 so results are not guaranteed to be accurate.
+This tool is a simulation based on mathematical models. Real-world RF propagation is affected by complex factors (interference, buildings, weather) not fully modeled here. Always verify with field testing.

@@ -4,10 +4,8 @@ import L from 'leaflet';
 import { useRF } from '../../context/RFContext';
 import { calculateLinkBudget, calculateFresnelRadius, calculateFresnelPolygon, analyzeLinkProfile } from '../../utils/rfMath';
 import { fetchElevationPath } from '../../utils/elevation';
-import { feature } from '@turf/turf';
 import * as turf from '@turf/turf';
 
-// Custom Icons
 // Custom Icons (DivIcon for efficiency)
 
 const txIcon = L.divIcon({
@@ -26,7 +24,8 @@ const rxIcon = L.divIcon({
 
 const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats }) => {
     const { 
-        txPower, antennaGain, freq, sf, bw, cableLoss, antennaHeight
+        txPower, antennaGain, freq, sf, bw, cableLoss, antennaHeight,
+        kFactor, clutterHeight 
     } = useRF();
 
     useMapEvents({
@@ -56,15 +55,18 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats }) => {
                 // Analyze
                 const analysis = analyzeLinkProfile(
                     profile, 
-                    freq, 
-                    antennaHeight, 
-                    antennaHeight 
+                    Number(freq), 
+                    Number(antennaHeight), 
+                    Number(antennaHeight),
+                    Number(kFactor),
+                    Number(clutterHeight)
                 );
 
                 setLinkStats({
                     loading: false,
                     isObstructed: analysis.isObstructed,
                     minClearance: analysis.minClearance,
+                    linkQuality: analysis.linkQuality,
                     profileWithStats: analysis.profileWithStats
                 });
             } else {
@@ -73,7 +75,7 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats }) => {
         };
 
         fetchData();
-    }, [nodes, freq, antennaHeight, setLinkStats]); 
+    }, [nodes, freq, antennaHeight, setLinkStats, kFactor, clutterHeight]); 
 
     if (nodes.length < 2) {
         return (

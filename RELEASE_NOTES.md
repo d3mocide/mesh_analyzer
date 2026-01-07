@@ -1,17 +1,46 @@
-# Release Notes - v0.2-rc
+# Release Notes
 
-## MeshRF - The Branding Update
+## v1.0 - Professional Edition
 
-This release brings a polished identity to the project and important configuration fixes for deployment.
+This major release transforms **meshRF** into a professional-grade RF planning tool, introducing geodetic physics, batch processing, and a completely modernized UI.
+
+### 🌐 Physics Engine Upgrade
+
+- **Geodetic Earth Model**: Implemented curved-earth calculations with configurable **K-Factor**.
+- **Accurate Fresnel Analysis**: Now strictly enforces the **60% Clearance Rule** (WISP Standard) for link quality ratings (Excellent/Good/Marginal/Obstructed).
+- **Clutter Awareness**: Added support for **Clutter Height** (trees/urban) in obstruction analysis.
+
+### ⚡ Batch Processing
+
+- **CSV Import**: Analyze hundreds of nodes at once by importing a simple CSV (`Name, Lat, Lon`).
+- **Matrix Analysis**: Automatically computes link feasibility for every pair of nodes (N\*(N-1)/2 links).
+- **Bulk Export**: Download detailed link budget reports (RSSI, Margin, Clearance) as CSV.
+
+### 🎨 UI Modernization
+
+- **Responsive Sidebar**: Collapsible, glassmorphism sidebar that works perfectly on mobile devices.
+- **Floating Controls**: Smart "Tab" toggle that floats independently of the sidebar.
+- **Visual Polish**: Custom dark-mode scrollbars, refined typography, and new "meshRF" branding with custom iconography.
+- **Link Analysis Panel**: Now fully resizable with a draggable handle for better chart visibility.
+
+### 🛠️ Configuration & Deployment
+
+- **Environment Variables**:
+  - `VITE_ELEVATION_API_URL`: Configure your own elevation provider (e.g., self-hosted Open-Meteo).
+  - `VITE_MAP_LAT` / `VITE_MAP_LNG`: Set custom default starting coordinates.
+- **Refined Docker**: Optimized Docker Compose setup for easy deployment.
+
+---
+
+## v0.2-rc - Branding Update
 
 ### 🎨 Branding & Identity
 
-- **New Name**: Officially renamed to **MeshRF**.
-- **New Icon**: Added a sleek, cyber-aesthetic SVG icon (Gradient Hexagon).
-- **UI Updates**: Updated title in Browser Tab and Sidebar.
+- **New Name**: Officially renamed to **meshRF**.
+- **New Icon**: Added stylized RF signal icon.
+- **UI Updates**: Updated browser title and sidebar header.
 
-### ⚙️ configuration & Troubleshooting
+### ⚙️ Configuration
 
-- **Custom Domains**: Added `ALLOWED_HOSTS` support for deploying behind reverse proxies or on custom domains (fixes "Blocked host" errors).
-- **Docker Publishing**: Workflow now explicitly builds and pushes the `latest` tag to GHCR.
-- **Documentation**: Updated `README.md` with correct clone URLs and Docker run commands.
+- **Allowed Hosts**: Added `ALLOWED_HOSTS` support for reverse proxy deployments.
+- **Docker Workflow**: Automated `latest` tag publishing.

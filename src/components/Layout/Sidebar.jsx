@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { RADIO_PRESETS, DEVICE_PRESETS, ANTENNA_PRESETS } from '../../data/presets';
 import { useRF } from '../../context/RFContext';
+import { fetchElevationPath } from '../../utils/elevation';
+import { analyzeLinkProfile, calculateLinkBudget } from '../../utils/rfMath';
 
 const Sidebar = () => {
     const {
@@ -16,8 +18,27 @@ const Sidebar = () => {
         cr, setCr,
         erp, cableLoss,
         units, setUnits,
-        mapStyle, setMapStyle
+        mapStyle, setMapStyle,
+        kFactor, setKFactor,
+        clutterHeight, setClutterHeight,
+        batchNodes, setBatchNodes
     } = useRF();
+
+    // Responsive & Collapse Logic
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [isOpen, setIsOpen] = useState(window.innerWidth > 768);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            // Optional: Auto-collapse on small screens
+            if (mobile && isOpen) setIsOpen(false);
+            if (!mobile && !isOpen) setIsOpen(true);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const handleTxPowerChange = (e) => {
         setTxPower(Math.min(Number(e.target.value), DEVICE_PRESETS[selectedDevice].tx_power_max));
@@ -57,26 +78,62 @@ const Sidebar = () => {
 
 
   return (
-    <aside style={{
-        width: '320px',
+    <>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        title={isOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+        style={{
+            position: isMobile ? 'fixed' : 'absolute', // Stay with sidebar
+            top: '85px',
+            left: isOpen ? '330px' : '15px', // Floating to the right
+            zIndex: 2010, // Above sidebar (2000)
+            background: 'var(--color-primary)',
+            color: '#000',
+            border: 'none',
+            borderRadius: '50%',
+            width: '28px',
+            height: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+            transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            fontSize: '10px'
+        }}
+      >
+        {isOpen ? '◀' : '▶'}
+      </button>
+
+      <aside style={{
+        width: isOpen ? '320px' : '0px',
         background: 'var(--color-bg-panel)',
         borderRight: '1px solid var(--color-border)',
         height: '100vh',
-        padding: 'var(--spacing-md)',
+        padding: isOpen ? 'var(--spacing-md)' : '0px',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 1000,
-        position: 'relative',
-        overflowY: 'auto'
+        zIndex: 2000,
+        position: isMobile ? 'fixed' : 'relative',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        whiteSpace: 'nowrap',
+        opacity: isOpen ? 1 : 0,
+        boxShadow: isMobile && isOpen ? '4px 0 20px rgba(0,0,0,0.5)' : 'none'
       }}>
       <h2 style={{ 
         color: 'var(--color-primary)', 
         margin: '0 0 var(--spacing-lg) 0',
         fontSize: '1.2rem',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em'
+        letterSpacing: '0.05em',
+        textAlign: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '10px'
       }}>
-        MeshRF
+        <img src="/icon.svg" alt="App Icon" style={{ height: '24px', width: '24px' }} /> meshRF
       </h2>
       
       {/* DEVICE SELECTION */}
@@ -259,8 +316,179 @@ const Sidebar = () => {
                  </div>
              </div>
              
+             {/* Environmental Settings */}
+             <div style={{marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #444'}}>
+                 <label style={{color: '#aaa', fontSize: '0.9em', display: 'block', marginBottom: '8px'}}>Environment</label>
+                 
+                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px'}}>
+                     <div>
+                         <label style={{fontSize: '0.75em', color: '#888'}}>Refraction (K)</label>
+                         <input 
+                            type="number" 
+                            step="0.01"
+                            value={kFactor}
+                            onChange={(e) => setKFactor(parseFloat(e.target.value))}
+                            style={{...inputStyle, padding: '2px 4px', fontSize: '0.85em'}}
+                         />
+                     </div>
+                     <div>
+                         <label style={{fontSize: '0.75em', color: '#888'}}>Clutter (m)</label>
+                         <input 
+                            type="number" 
+                            step="1"
+                            value={clutterHeight}
+                            onChange={(e) => setClutterHeight(parseFloat(e.target.value))}
+                            style={{...inputStyle, padding: '2px 4px', fontSize: '0.85em'}}
+                         />
+                     </div>
+                 </div>
+                 <div style={{fontSize: '0.7em', color: '#666', marginTop: '4px', fontStyle: 'italic'}}>
+                     K=1.33 Standard, K=1.0 Bare Earth
+                 </div>
+             </div>
+
+             {/* Batch Operations */}
+             <div style={{marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #444'}}>
+                 <label style={{color: '#aaa', fontSize: '0.9em', display: 'block', marginBottom: '8px'}}>Batch Processing</label>
+                 
+                 {/* Import */}
+                 <div style={{marginBottom: '8px'}}>
+                     <label style={{display: 'block', padding: '6px 10px', background: '#333', color: '#ccc', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8em', textAlign: 'center'}}>
+                         Import Nodes (CSV)
+                         <input 
+                            type="file" 
+                            accept=".csv"
+                            style={{display: 'none'}}
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                        const text = event.target.result;
+                                        const lines = text.split('\n');
+                                        const newNodes = [];
+                                        lines.forEach((line, idx) => {
+                                            if (idx === 0 && line.toLowerCase().includes('lat')) return; // Skip header
+                                            const parts = line.split(',');
+                                            if (parts.length >= 3) {
+                                                // Assume: name, lat, lon OR lat, lon, name?
+                                                // Let's try to detect or enforce Name,Lat,Lon
+                                                let name, lat, lng;
+                                                
+                                                // Simple heuristic: if parts[0] is number, it's lat.
+                                                if (!isNaN(parseFloat(parts[0]))) {
+                                                     lat = parseFloat(parts[0]);
+                                                     lng = parseFloat(parts[1]);
+                                                     name = parts[2] || `Node ${idx}`;
+                                                } else {
+                                                     name = parts[0];
+                                                     lat = parseFloat(parts[1]);
+                                                     lng = parseFloat(parts[2]);
+                                                }
+                                                
+                                                if (!isNaN(lat) && !isNaN(lng)) {
+                                                    newNodes.push({ id: idx, name: name.trim(), lat, lng });
+                                                }
+                                            }
+                                        });
+                                        setBatchNodes(newNodes);
+                                        alert(`Imported ${newNodes.length} nodes.`);
+                                    };
+                                    reader.readAsText(file);
+                                }
+                            }}
+                         />
+                     </label>
+                     <div style={{fontSize: '0.7em', color: '#666', marginTop: '4px'}}>Format: Name, Lat, Lon</div>
+                 </div>
+
+                 {/* Export Report */}
+                 {batchNodes.length > 1 && (
+                     <button 
+                        style={{...buttonStyle, background: '#00afb9', width: '100%'}}
+                        onClick={async () => {
+                             const totalLinks = batchNodes.length * (batchNodes.length - 1) / 2;
+                             if (batchNodes.length > 20 && !window.confirm(`Preparing to analyze ${totalLinks} links. This may take a while. Continue?`)) return;
+                             
+                             const startExport = async () => {
+                                 let csvContent = "data:text/csv;charset=utf-8,Source,Target,Distance_km,Status,Quality,Margin_dB,Clearance_m\n";
+                                 
+                                 // Iterate all pairs
+                                 for (let i = 0; i < batchNodes.length; i++) {
+                                     for (let j = i + 1; j < batchNodes.length; j++) {
+                                         const n1 = batchNodes[i];
+                                         const n2 = batchNodes[j];
+                                         
+                                         try {
+                                             // Fetch Profile
+                                             const profile = await fetchElevationPath(
+                                                 {lat: n1.lat, lng: n1.lng}, 
+                                                 {lat: n2.lat, lng: n2.lng}, 
+                                                 20 // Lower resolution for batch to save time
+                                             );
+                                             
+                                             if (profile) {
+                                                  const analysis = analyzeLinkProfile(
+                                                      profile, 
+                                                      freq, 
+                                                      antennaHeight, 
+                                                      antennaHeight,
+                                                      kFactor,
+                                                      clutterHeight
+                                                  );
+                                                  
+                                                  const distKm = profile[profile.length-1].distance;
+                                                  
+                                                  // Link Budget
+                                                  const budget = calculateLinkBudget({
+                                                        txPower, 
+                                                        txGain: antennaGain, 
+                                                        txLoss: cableLoss,
+                                                        rxGain: antennaGain, 
+                                                        rxLoss: cableLoss,
+                                                        distanceKm: distKm, 
+                                                        freqMHz: freq,
+                                                        sf, bw
+                                                  });
+                                                  
+                                                  const status = analysis.isObstructed ? 'OBSTRUCTED' : (budget.margin > 10 ? 'GOOD' : 'MARGINAL');
+                                                  
+                                                  csvContent += `${n1.name},${n2.name},${distKm.toFixed(3)},${status},${analysis.linkQuality},${budget.margin},${analysis.minClearance}\n`;
+                                             }
+                                         } catch (e) {
+                                             console.error("Batch Error", e);
+                                             csvContent += `${n1.name},${n2.name},ERR,ERR,ERR,ERR,ERR\n`;
+                                         }
+                                         
+                                         // Small delay to prevent browser freeze & rate limit
+                                         await new Promise(r => setTimeout(r, 200));
+                                     }
+                                 }
+                                 
+                                 // Trigger Download
+                                 const encodedUri = encodeURI(csvContent);
+                                 const link = document.createElement("a");
+                                 link.setAttribute("href", encodedUri);
+                                 link.setAttribute("download", `mesh_rf_analysis_${new Date().toISOString().slice(0,10)}.csv`);
+                                 document.body.appendChild(link);
+                                 link.click();
+                                 document.body.removeChild(link);
+                             };
+                             
+                             // Allow UI to update before blocking
+                             setTimeout(startExport, 100);
+                        }}
+                     >
+                         Export Mesh Report
+                     </button>
+                 )}
+                 {batchNodes.length > 0 && (
+                      <div style={{fontSize: '0.75em', color: '#888', marginTop: '4px'}}>{batchNodes.length} Nodes Loaded</div>
+                 )}
+             </div>
+
              {/* Map Style Selector */}
-             <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', marginTop: '12px'}}>
+             <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', marginTop: '12px'}}>
                  <label style={{color: '#aaa', fontSize: '0.9em'}}>Map Style</label>
                  <select 
                     value={mapStyle}
@@ -281,9 +509,25 @@ const Sidebar = () => {
                      <option value="satellite">Satellite</option>
                  </select>
              </div>
+
+             {/* Footer */}
+             <div style={{marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #333', textAlign: 'center'}}>
+                 <a 
+                    href="https://github.com/d3mocide/MeshRF/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{color: '#666', fontSize: '0.75em', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}}
+                 >
+                    <svg height="16" viewBox="0 0 16 16" width="16" style={{fill: '#666'}}>
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                    </svg>
+                    d3mocide/MeshRF
+                 </a>
+             </div>
         </div>
 
     </aside>
+    </>
   );
 };
 

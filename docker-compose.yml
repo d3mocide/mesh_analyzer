@@ -5,6 +5,14 @@ services:
     ports:
       - "5173:5173"
     environment:
-    #Add your hostname if using behind a reverse proxy  
+    # Hostname for reverse proxy
       - ALLOWED_HOSTS=localhost
+    # Custom Elevation API Endpoint (Optional)
+    # - VITE_ELEVATION_API_URL=http://localhost:8080/v1/elevation
+    # Default Map Center (Portland, OR)
+      - VITE_MAP_LAT=45.5152
+      - VITE_MAP_LNG=-122.6784
+    volumes:
+      - .:/app
+      - /app/node_modules
     command: npm run dev -- --host

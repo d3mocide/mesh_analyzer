@@ -22,14 +22,17 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 const MapComponent = () => {
-  const position = [45.5152, -122.6784]; // Portland, OR
+  // Default Map Center (Portland, OR)
+  const defaultLat = parseFloat(import.meta.env.VITE_MAP_LAT) || 45.5152;
+  const defaultLng = parseFloat(import.meta.env.VITE_MAP_LNG) || -122.6784;
+  const position = [defaultLat, defaultLng];
 
   // Lifted State
   const [nodes, setNodes] = useState([]); 
   const [linkStats, setLinkStats] = useState({ minClearance: 0, isObstructed: false, loading: false });
   
   // Calculate Budget at container level for Panel
-  const { txPower, antennaGain, freq, sf, bw, cableLoss, units, mapStyle } = useRF();
+  const { txPower, antennaGain, freq, sf, bw, cableLoss, units, mapStyle, batchNodes } = useRF();
   
   // Map Configs
   const MAP_STYLES = {
@@ -105,6 +108,22 @@ const MapComponent = () => {
               units={units}
           />
       )}
+      
+      {/* Batch Nodes Rendering */}
+      {batchNodes.length > 0 && batchNodes.map((node) => (
+          <L.Marker 
+              key={`batch-${node.id}`} 
+              position={[node.lat, node.lng]} 
+              icon={L.divIcon({
+                  className: 'batch-node-icon',
+                  html: `<div style="background-color: #aaa; width: 8px; height: 8px; border-radius: 50%; opacity: 0.7; border: 1px solid #000;"></div>`,
+                  iconSize: [8, 8],
+                  iconAnchor: [4, 4]
+              })}
+          >
+              <L.Popup>{node.name}</L.Popup>
+          </L.Marker>
+      ))}
     </div>
   );
 };
