@@ -22,6 +22,15 @@ services:
     container_name: rf_engine
     ports:
       - "5001:5001"
+    environment:
+      # Elevation Data Configuration
+      # For custom OpenTopoData instance (e.g., self-hosted with local SRTM data)
+      # Leave blank to use public api.opentopodata.org (1000 requests/day limit)
+      - ELEVATION_API_URL=${ELEVATION_API_URL:-https://api.opentopodata.org}
+      
+      # Dataset to use: srtm30m, srtm90m, aster30m, ned10m, etc.
+      # See: https://www.opentopodata.org/datasets/
+      - ELEVATION_DATASET=${ELEVATION_DATASET:-srtm30m}
     volumes:
       - ./cache:/app/cache
 

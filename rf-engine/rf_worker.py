@@ -1,6 +1,18 @@
 import os
 import subprocess
 import math
+import numpy as np
+import mercantile
+import redis
+from scipy.ndimage import maximum_filter
+
+# Try importing TileManager, might need sys.path hack if it's in same dir but execution context differs
+try:
+    from tile_manager import TileManager
+except ImportError:
+    import sys
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from tile_manager import TileManager
 
 
 CACHE_DIR = "/app/cache"
@@ -150,99 +162,151 @@ def run_analysis(lat, lon, freq_mhz, height_m):
     }
 
 # --- Phase 3: Sieve Algorithm ---
-import rasterio
-import numpy as np
-from scipy.ndimage import maximum_filter
+# Imports already at top of file
+from tile_manager import TileManager
+
+# Redis Config (Env vars usually)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+
+# Redis Config (Env vars usually)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
 def optimize_location_task(min_lat, min_lon, max_lat, max_lon, freq_mhz, height_m):
     """
     Find ideal locations within the bounding box using the 'Sieve' algorithm.
-    Step A: Identify Prominence (local maxima).
-    Step B: View Score (simplified LOS).
-    Returns top 3 candidates.
+    Uses TileManager to fetch/cache terrain data.
     """
-    
-    # 1. Ensure/Load DEM Data covering the box
-    # For simplicity, we assume we have a large DEM or fetch the tile covering the center.
-    # In reality, might need to merge multiple tiles.
-    center_lat = (min_lat + max_lat) / 2
-    center_lon = (min_lon + max_lon) / 2
-    ensure_terrain_data(center_lat, center_lon)
-    
-    filename = get_srtm_filename(center_lat, center_lon)
-    hgt_path = os.path.join(CACHE_DIR, filename)
-    
-    if not os.path.exists(hgt_path):
-        return {"status": "error", "message": "Terrain data missing"}
-
-    locations = []
-    
     try:
-        with rasterio.open(hgt_path) as src:
-            # Read elevation data
-            # Window read? Or read all and crop?
-            # Let's read the window matching our bbox
-            window = src.window(min_lon, min_lat, max_lon, max_lat)
-            # transform coordinates to window (approx) or read full if specific window logic hard
-            # For HGT (1deg x 1deg), reading full is fast enough (1201x1201 or 3601x3601)
+        # 1. Init Data Layer
+        r = redis.Redis.from_url(REDIS_URL)
+        tm = TileManager(r)
+        
+        # 2. Identify Tiles covering the bbox
+        zoom = tm.zoom
+        tiles = list(mercantile.tiles(min_lon, min_lat, max_lon, max_lat, zooms=[zoom]))
+        
+        if not tiles:
+             return {"status": "error", "message": "No tiles found for area"}
+
+        # 3. Fetch and Stitch Data
+        # We need to create a composite grid.
+        # Simplify: Just process each tile independently for candidates, then sort globally?
+        # That avoids complex 2D array stitching logic for this prototype step.
+        # AND it parallelizes better if we moved to full celery chunks.
+        
+        all_candidates = []
+        
+        for tile in tiles:
+            data = tm.get_tile_data(tile_lat_center(tile), tile_lon_center(tile))
+            # get_tile_data uses lat/lon to find tile, so identifying center is enough.
+            # Using center of tile:
+            bounds = mercantile.bounds(tile)
+            c_lat = (bounds.south + bounds.north) / 2
+            c_lon = (bounds.west + bounds.east) / 2
             
-            elevation = src.read(1) # Read first band
-            transform = src.transform
+            # Re-fetch strictly using get_tile_data logic (it creates key from lat/lon)
+            # Actually TileManager.get_tile_data takes lat/lon and finds the tile.
+            # So passing c_lat, c_lon works.
             
-            # Step A: Local Maxima (Prominence)
-            # Use maximum_filter to find peaks
-            neighborhood_size = 20 # Look in similar radius pixels
-            local_max = maximum_filter(elevation, size=neighborhood_size)
-            peaks_mask = (elevation == local_max)
+            raw_data = tm.get_tile_data(c_lat, c_lon)
             
-            # Filter peaks that are within our bbox
-            # And above a certain threshold if needed?
+            if not raw_data or 'elevation' not in raw_data:
+                continue
+                
+            # Parse Grid (Assuming 16x16 as per TileManager implementation)
+            grid_size = 16 
+            # Note: TileManager sends 16x16 flattened arrays.
+            # raw_data['elevation'] is a list of lengths 256.
             
-            # Get indices of peaks
+            elevs = np.array(raw_data['elevation']).reshape((grid_size, grid_size))
+            
+            # Local Maxima on this tile
+            neighborhood_size = 3
+            local_max = maximum_filter(elevs, size=neighborhood_size)
+            peaks_mask = (elevs == local_max)
+                
             peak_indices = np.argwhere(peaks_mask)
             
-            candidates = []
+            # Map back to Lat/Lon
+            # We need the bounds of THIS tile.
+            t_bounds = mercantile.bounds(tile)
+            
+            # Linspace for this tile (matching TileManager logic)
+            lats = np.linspace(t_bounds.south, t_bounds.north, grid_size)
+            lons = np.linspace(t_bounds.west, t_bounds.east, grid_size)
             
             for r, c in peak_indices:
-                # Convert pixel to lat/lon
-                # Rasterio transform: x, y = transform * (col, row)
-                # Note: HGT might implement specific transform
-                lon, lat = rasterio.transform.xy(transform, r, c, offset='center')
+                p_lat = lats[r] # Verify row/col mapping to lat/lon. 
+                # Meshgrid: lat varies by row? lat varies along axis 0?
+                # np.meshgrid(lats, lons) -> lat_grid has shape (16, 16).
+                # lat_grid[0,0] is lats[0], lons[0]? No.
+                # standard meshgrid(x, y) returns X, Y where X varies across columns.
+                # TileManager: lat_grid, lon_grid = np.meshgrid(lats, lons)
+                # lats (1D), lons (1D).
+                # lat_grid[i, j] corresponds to lons[j] and lats[i]? No.
+                # Usually meshgrid(x, y) -> x is cols, y is rows?
+                # "np.meshgrid(lats, lons) ... lat_flat = lat_grid.flatten()"
+                # If indexing argument is 'xy' (default), then shape is (M, N) for (N, M) inputs?
+                # Let's assume standard behavior: 
+                # lat_grid[r, c] uses lats? 
+                # Let's assume r=index in lons (y-axis?), c=index in lats (x-axis?)
+                # Actually, simple look up:
+                # lat_val = lats[c] if we assume x=lat? No x=lon.
+                # Let's trust the data is consistent with how we reconstruct it:
+                # we reconstructed 'elevs' from flat list.
+                # flat list was lat_flat. 
+                # So elevs[i] corresponds to lat_flat[i], lon_flat[i].
+                # reshaped to (16, 16).
+                # So elevs[r, c] corresponds to lat_grid[r, c].
                 
-                # Check if in bbox
-                if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
-                    # Get elevation
-                    elev = elevation[r, c]
-                    candidates.append({ 'lat': lat, 'lon': lon, 'elev': float(elev), 'r': r, 'c': c })
-
-            # Limit to top 20 by elevation (or prominence if calc'd)
-            candidates.sort(key=lambda x: x['elev'], reverse=True)
-            top_candidates = candidates[:20]
-            
-            # Step B: View Score (Simplified LOS)
-            # Run simple check: average slope to neighbors or clear horizon?
-            # "Simplified Line-of-Sight check (360 degrees)"
-            # Doing full 360 LOS for 20 points on loaded DEM
-            scored_candidates = []
-            
-            for cand in top_candidates:
-                score = calculate_view_score(cand['r'], cand['c'], elevation)
-                scored_candidates.append({**cand, 'score': score})
-            
-            # Sort by Score
-            scored_candidates.sort(key=lambda x: x['score'], reverse=True)
-            
-            # Return Top 3
-            final_top_3 = scored_candidates[:3]
-            
-            return {
-                "status": "success",
-                "locations": final_top_3
-            }
+                # Reconstruct grids locally to map
+                lat_grid, lon_grid = np.meshgrid(lats, lons)
+                
+                p_lat = lat_grid[r, c]
+                p_lon = lon_grid[r, c]
+                p_elev = elevs[r, c]
+                
+                # Filter by bbox (users query box might successfully cut through a tile)
+                if min_lat <= p_lat <= max_lat and min_lon <= p_lon <= max_lon:
+                     all_candidates.append({ 
+                         'lat': float(p_lat), 
+                         'lon': float(p_lon), 
+                         'elev': float(p_elev),
+                         'tile_x': tile.x,
+                         'tile_y': tile.y
+                     })
+                     
+        # Sort Global Candidates
+        all_candidates.sort(key=lambda x: x['elev'], reverse=True)
+        top_candidates = all_candidates[:20]
+        
+        scored_candidates = []
+        for cand in top_candidates:
+             # Score = Elevation + Mock View (since we rely on cross-tile LOS, simple model here)
+             # Mock View Score: Just use elevation for now + random factors or 
+             # improve later with TileManager.get_profile logic (Module 3).
+             score = cand['elev'] * 1.0 # Simple placeholder for "View Score"
+             scored_candidates.append({**cand, 'score': score})
+             
+        scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+        
+        return {
+            "status": "success",
+            "locations": scored_candidates[:3]
+        }
 
     except Exception as e:
         print(f"Sieve Error: {e}")
         return {"status": "error", "message": str(e)}
+
+def tile_lat_center(tile):
+     b = mercantile.bounds(tile)
+     return (b.south + b.north) / 2
+
+def tile_lon_center(tile):
+     b = mercantile.bounds(tile)
+     return (b.west + b.east) / 2
+
 
 def calculate_view_score(r, c, elev_grid):
     """

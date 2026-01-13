@@ -22,12 +22,16 @@ export const RFProvider = ({ children }) => {
     const [antennaGain, setAntennaGain] = useState(ANTENNA_PRESETS.STUBBY.gain);
     
     // Preferences
-    const [units, setUnits] = useState('metric'); // 'metric' or 'imperial'
+    const [units, setUnits] = useState('imperial'); // 'metric' or 'imperial'
     const [mapStyle, setMapStyle] = useState('dark'); // 'dark', 'light', 'topo', 'satellite'
     
     // Environmental
     const [kFactor, setKFactor] = useState(1.33); // Standard Refraction
     const [clutterHeight, setClutterHeight] = useState(0); // Forest/Urban Obstruction (m)
+    
+    // Signals
+    const [recalcTimestamp, setRecalcTimestamp] = useState(0);
+    const triggerRecalc = () => setRecalcTimestamp(Date.now());
     
     // Radio Params
     const [freq, setFreq] = useState(RADIO_PRESETS.MESHCORE_PNW.freq);
@@ -89,7 +93,8 @@ export const RFProvider = ({ children }) => {
         units, setUnits,
         mapStyle, setMapStyle,
         kFactor, setKFactor,
-        clutterHeight, setClutterHeight
+        clutterHeight, setClutterHeight,
+        recalcTimestamp, triggerRecalc
     };
 
     return (

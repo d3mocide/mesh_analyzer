@@ -1,55 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useMapEvents, Marker, Polyline, Popup, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import { useRF } from '../../context/RFContext';
 import { calculateLinkBudget, calculateFresnelRadius, calculateFresnelPolygon, analyzeLinkProfile } from '../../utils/rfMath';
 import { fetchElevationPath } from '../../utils/elevation';
 import { analyzeCoverage } from '../../utils/rfService';
+import useThrottledCalculation from '../../hooks/useThrottledCalculation';
 import * as turf from '@turf/turf';
 
 // Custom Icons (DivIcon for efficiency)
 
 const txIcon = L.divIcon({
     className: 'custom-icon-tx',
-    html: `<div style="background-color: #00ff41; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px black;"></div>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6]
+    html: `<div style="background-color: #00ff41; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px black;"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
 });
 
 const rxIcon = L.divIcon({
     className: 'custom-icon-rx',
-    html: `<div style="background-color: #ff0000; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px black;"></div>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6]
+    html: `<div style="background-color: #ff0000; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px black;"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
 });
 
 const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverlay, active = true }) => {
     const { 
         txPower, antennaGain, freq, sf, bw, cableLoss, antennaHeight,
-        kFactor, clutterHeight 
+        kFactor, clutterHeight, recalcTimestamp
     } = useRF();
 
-    useMapEvents({
-        click(e) {
-            if (!active) return;
-            const { lat, lng } = e.latlng;
-            setNodes(prev => {
-                if (prev.length >= 2) return [{ lat, lng }]; // Reset if full
-                return [...prev, { lat, lng }];
-            });
-            // Reset stats on new click sequence start
-            if (nodes.length >= 2) setLinkStats({ minClearance: 0, isObstructed: false, loading: false });
-        }
-    });
-
-    // Elevation & Analysis Effect
-    useEffect(() => {
-        if (nodes.length !== 2) return;
-
-        const fetchData = async () => {
-            setLinkStats(prev => ({ ...prev, loading: true }));
-            const [p1, p2] = nodes;
-            
+    // Throttled analysis function to avoid API spam during drag
+    // We explicitly invoke this instead of relying on useEffect on [nodes]
+    // to prevent rapid-fire execution.
+    const runAnalysis = useThrottledCalculation(async (currentNodes) => {
+        if (currentNodes.length !== 2) return;
+        
+        setLinkStats(prev => ({ ...prev, loading: true }));
+        const [p1, p2] = currentNodes;
+        
+        try {
             // Fetch Elevation Profile
             const profile = await fetchElevationPath(p1, p2, 50); // 50 samples
             
@@ -74,26 +64,104 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverla
             } else {
                 setLinkStats(prev => ({ ...prev, loading: false }));
             }
-        };
+        } catch (error) {
+            console.error("Analysis failed:", error);
+            setLinkStats(prev => ({ ...prev, loading: false }));
+        }
+    }, 50); // 50ms throttle
 
-        fetchData();
-    }, [nodes, freq, antennaHeight, setLinkStats, kFactor, clutterHeight]); 
+    // Initial analysis when nodes are first added (not by drag)
+    useEffect(() => {
+        if (nodes.length === 2) {
+             runAnalysis(nodes);
+        }
+    }, [nodes.length, recalcTimestamp]); // Dependencies that require re-calculation
+
+    useMapEvents({
+        click(e) {
+            if (!active) return;
+            const { lat, lng } = e.latlng;
+            setNodes(prev => {
+                if (prev.length >= 2) return [{ lat, lng, locked: false }]; // Reset if full
+                
+                const newNodes = [...prev, { lat, lng, locked: false }];
+                if (newNodes.length === 2) {
+                     // Trigger immediate analysis on click completion
+                     runAnalysis(newNodes);
+                }
+                return newNodes;
+            });
+            // Reset stats on new click sequence start
+            if (nodes.length >= 2) setLinkStats({ minClearance: 0, isObstructed: false, loading: false });
+        }
+    });
+
+    // Handle Drag (Visual Update Only)
+    const handleDrag = useCallback((idx, e) => {
+        const marker = e.target;
+        const position = marker.getLatLng();
+        
+        // Optimistic UI Update: Update state immediately for visual feedback
+        setNodes(prev => {
+            const newNodes = [...prev];
+            if (newNodes[idx].locked) return prev; // Guardrail for locked nodes
+
+            newNodes[idx] = { ...newNodes[idx], lat: position.lat, lng: position.lng };
+            return newNodes;
+        });
+    }, [setNodes]);
+
+    // Handle Drag End (Trigger API Analysis)
+    const handleDragEnd = useCallback((idx, e) => {
+        const marker = e.target;
+        const position = marker.getLatLng();
+        
+        setNodes(prev => {
+            const newNodes = [...prev];
+             if (newNodes[idx].locked) return prev;
+
+            newNodes[idx] = { ...newNodes[idx], lat: position.lat, lng: position.lng };
+            
+            // Trigger analysis ONLY here
+            if (newNodes.length === 2) {
+                runAnalysis(newNodes);
+            }
+            return newNodes;
+        });
+    }, [runAnalysis, setNodes]);
+
+    // Ref for the clear button container to prevent map clicks
+    // Using callback ref to ensure it works when element is conditionally rendered
+    const handleClearBtnRef = useCallback((node) => {
+        if (node) {
+            L.DomEvent.disableClickPropagation(node);
+        }
+    }, []);
 
     if (nodes.length < 2) {
         return (
             <>
                 {nodes.map((pos, idx) => (
-                    <Marker key={idx} position={pos} icon={idx === 0 ? txIcon : rxIcon}>
+                    <Marker 
+                        key={idx} 
+                        position={pos} 
+                        icon={idx === 0 ? txIcon : rxIcon}
+                        draggable={!pos.locked && active}
+                        eventHandlers={{
+                            drag: (e) => handleDrag(idx, e),
+                            dragend: (e) => handleDragEnd(idx, e)
+                        }}
+                    >
                          <Popup>
                              <div><strong>{idx === 0 ? "TX (Point A)" : "RX (Point B)"}</strong></div>
+                             {pos.locked && <div><small>(Locked)</small></div>}
                              <div style={{ marginTop: '5px' }}>
                                 <button 
                                     onClick={(e) => {
-                                        e.stopPropagation(); // Prevent map click? React Leaflet handles it.
+                                        e.stopPropagation(); 
                                         analyzeCoverage(pos.lat, pos.lng, freq, antennaHeight)
                                             .then(data => {
                                                 if(data.map_url && data.bounds) {
-                                                    // API returns bounds as [[lat, lon], [lat, lon]]
                                                     const bounds = data.bounds; 
                                                     setCoverageOverlay({ url: 'http://localhost:5001' + data.map_url, bounds });
                                                 }
@@ -148,11 +216,23 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverla
 
     const fresnelPolygon = calculateFresnelPolygon(p1, p2, freq);
 
+
+
     return (
         <>
-            <Marker position={p1} icon={txIcon}>
+            {/* Markers and Lines code... */}
+            <Marker 
+                position={p1} 
+                icon={txIcon}
+                draggable={!p1.locked && active}
+                eventHandlers={{
+                    drag: (e) => handleDrag(0, e),
+                    dragend: (e) => handleDragEnd(0, e)
+                }}
+            >
                 <Popup>
                     <div><strong>TX (Point A)</strong></div>
+                    {p1.locked && <div><small>(Locked)</small></div>}
                     <div style={{ marginTop: '5px' }}>
                         <button 
                             onClick={(e) => {
@@ -176,8 +256,19 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverla
                     </div>
                 </Popup>
             </Marker>
-            <Marker position={p2} icon={rxIcon}>
-                <Popup>RX (Point B)</Popup>
+            <Marker 
+                position={p2} 
+                icon={rxIcon}
+                draggable={!p2.locked && active}
+                eventHandlers={{
+                    drag: (e) => handleDrag(1, e),
+                    dragend: (e) => handleDragEnd(1, e)
+                }}
+            >
+                <Popup>
+                    <div><strong>RX (Point B)</strong></div>
+                    {p2.locked && <div><small>(Locked)</small></div>}
+                </Popup>
             </Marker>
             
             {/* Direct Line of Sight */}
@@ -204,7 +295,7 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverla
 
             {/* Clear Link Button */}
              <div className="leaflet-bottom leaflet-right" style={{ pointerEvents: 'none', marginBottom: '50px', marginRight: '20px', zIndex: 9999, position: 'absolute' }}>
-                 <div style={{ pointerEvents: 'auto' }}> {/* Re-enable pointer events for the button */}
+                 <div ref={handleClearBtnRef} style={{ pointerEvents: 'auto' }}> {/* Re-enable pointer events for the button */}
                     <button 
                         onClick={(e) => {
                             e.stopPropagation();
@@ -238,4 +329,4 @@ const LinkLayer = ({ nodes, setNodes, linkStats, setLinkStats, setCoverageOverla
     );
 };
 
-export default LinkLayer;
+export default memo(LinkLayer);
