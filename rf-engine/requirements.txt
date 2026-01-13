@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+
+celery
+redis
+rasterio
+numpy
+scipy
+requests
+msgpack
+mercantile
+itmlogic
+networkx
+shapely
+Pillow

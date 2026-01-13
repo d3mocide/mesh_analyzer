@@ -1,5 +1,106 @@
 # Release Notes
 
+## v1.2 - OpenTopoData Migration & ViewShed Layer
+
+This release replaces the Mapbox elevation API with OpenTopoData, adds a beta ViewShed visualization tool, and includes comprehensive code cleanup and security improvements.
+
+### 🌐 Elevation Data Overhaul
+
+- **OpenTopoData Integration**: Switched from Mapbox to OpenTopoData API for elevation tile fetching.
+  - **98.8% API Reduction**: Batch requests reduce API calls from 256 to 3 per tile.
+  - **No Authentication Required**: Works out-of-the-box with public API (1000 requests/day).
+  - **Configurable Sources**: Support for custom/self-hosted OpenTopoData instances via environment variables.
+  - **Rate Limit Handling**: Built-in 300ms delays between batches to respect free tier limits.
+- **Environment Variables**:
+  ```bash
+  ELEVATION_API_URL=https://api.opentopodata.org  # Custom instance URL
+  ELEVATION_DATASET=srtm30m  # srtm30m, srtm90m, aster30m, ned10m
+  ```
+
+### 🔭 ViewShed Layer (Beta) ⚠️ _In Development_
+
+- **WebGL-Powered Visualization**: Real-time terrain visibility overlay using custom shaders.
+- **Terrain-RGB Decoding**: Decodes elevation tiles directly on GPU for performance.
+- **Interactive Placement**: Click to place observer and instantly see viewshed calculation.
+- **Visual Feedback**: Red/green overlay indicates obstructed vs. visible terrain areas.
+- **Seamless Integration**: Fetches elevation tiles from the same OpenTopoData backend.
+
+_Note: This feature is in active development. Advanced features like Fresnel zone analysis are planned for future releases._
+
+### 📡 Link Analysis Optimizations
+
+- **Smarter API Updates**: Link analysis now only triggers when both TX and RX points are placed, preventing unnecessary API calls.
+- **Improved UX**: Moving a single marker no longer clears the previous analysis result until the second point is placed.
+- **Reduced Backend Load**: Eliminated redundant API requests during marker placement workflow.
+- **Cleaner State Management**: Better handling of partial link configurations.
+
+### 🧹 Code Quality & Security
+
+- **Code Cleanup**: Removed 80+ lines of unnecessary comments and verbose documentation.
+
+  - Cleaned up `tile_manager.py` (meshgrid interpolation comments)
+  - Updated all Mapbox-specific references to generic "Terrain-RGB" terminology
+  - Removed redundant comments in `server.py` and `ViewshedLayer.js`
+
+- **Security Audit**: Comprehensive security scan with zero critical findings.
+  - ✅ No exposed API keys or credentials
+  - ✅ Proper environment variable usage throughout codebase
+  - ✅ `.gitignore` correctly prevents sensitive file commits
+  - ⚠️ Identified CORS and Redis auth as production hardening items
+
+### 📋 Feature Status Clarification
+
+Features marked as **"In Development"** in documentation and UI:
+
+- **Find Ideal Spot** - Optimal node placement search
+- **Heatmap** - Coverage analysis visualization
+- **ViewShed** - Terrain visibility analysis (Beta)
+
+These features are functional but may have incomplete behavior or missing advanced features.
+
+### 🔧 Breaking Changes
+
+- **Removed**: Mapbox API dependency and `MAPBOX_TOKEN` environment variable
+- **Migration**: Users upgrading should remove `MAPBOX_TOKEN` from their `.env` files
+
+### 📚 Documentation Updates
+
+- Updated README.md with OpenTopoData configuration guide
+- Added ViewShed section to feature list
+- Marked in-development features with warning indicators
+- Removed duplicate docker-compose configuration sections
+
+---
+
+## v1.1 - UI Polish & Local Data
+
+This release focuses on usability improvements and a transition to a more robust, local-first data model.
+
+### 📍 Usability Experience (UX)
+
+- **Optimization Tool Refinement**:
+
+  - **Glassmorphism Overlays**: New success/failure notifications with modern styling.
+  - **Persistent State**: Clearing optimization results now keeps the tool active for rapid re-testing.
+  - **Visual Feedback**: Added loading spinners during terrain scans.
+
+- **Link Analysis (LOS) Workflow**:
+  - **Smart Toggles**: Disabling the Link Analysis tool now automatically clears the map to ensure a clean workspace.
+  - **New "Clear Link" Button**: Added a dedicated floating action button to reset the current analysis without exiting the tool.
+
+### 🛠️ Backend & Data
+
+- **Local SRTM Migration**:
+
+  - Removed dependency on external Elevation APIs (OpenTopography).
+  - **Offline Capable**: The `rf-engine` now requires local `.hgt` (SRTM) files in the `./cache` directory.
+  - **Efficiency**: Removed `requests` library dependency for a lighter container footprint.
+
+- **Dev Experience**:
+  - Updated `docker-compose` to support local container builds for the web app, mirroring the backend workflow.
+
+---
+
 ## v1.0 - Professional Edition
 
 This major release transforms **meshRF** into a professional-grade RF planning tool, introducing geodetic physics, batch processing, and a completely modernized UI.

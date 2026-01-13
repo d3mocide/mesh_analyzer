@@ -21,7 +21,8 @@ const Sidebar = () => {
         mapStyle, setMapStyle,
         kFactor, setKFactor,
         clutterHeight, setClutterHeight,
-        batchNodes, setBatchNodes
+        batchNodes, setBatchNodes,
+        triggerRecalc
     } = useRF();
 
     // Responsive & Collapse Logic
@@ -276,7 +277,34 @@ const Sidebar = () => {
             <div style={{fontSize: '0.7rem', color: 'var(--color-text-muted)'}}>
                 (TX {txPower} + Gain {antennaGain} - Loss {cableLoss})
             </div>
+
         </div>
+
+        {/* Manual Recalculation Trigger */}
+        <button
+            onClick={triggerRecalc}
+            style={{
+                width: '100%',
+                marginTop: '8px',
+                padding: '8px',
+                background: 'rgba(0, 255, 65, 0.1)',
+                border: '1px solid var(--color-primary)',
+                color: 'var(--color-primary)',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                fontSize: '0.9em',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+            }}
+            onMouseOver={(e) => e.target.style.background = 'rgba(0, 255, 65, 0.2)'}
+            onMouseOut={(e) => e.target.style.background = 'rgba(0, 255, 65, 0.1)'}
+        >
+            <span>⟳</span> Update Calculation
+        </button>
       </div>
 
         {/* SETTINGS */}
@@ -320,30 +348,34 @@ const Sidebar = () => {
              <div style={{marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #444'}}>
                  <label style={{color: '#aaa', fontSize: '0.9em', display: 'block', marginBottom: '8px'}}>Environment</label>
                  
-                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px'}}>
+                 <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                      <div>
-                         <label style={{fontSize: '0.75em', color: '#888'}}>Refraction (K)</label>
+                         <label style={{fontSize: '0.75em', color: '#888', display: 'block', marginBottom: '4px'}}>
+                             Refraction Index (K-Factor)
+                         </label>
                          <input 
                             type="number" 
                             step="0.01"
                             value={kFactor}
                             onChange={(e) => setKFactor(parseFloat(e.target.value))}
-                            style={{...inputStyle, padding: '2px 4px', fontSize: '0.85em'}}
+                            style={{...inputStyle, padding: '6px', fontSize: '0.9em'}}
                          />
+                         <div style={{fontSize: '0.7em', color: '#555', marginTop: '2px'}}>
+                            Standard: 1.33, LOS: 1.0
+                         </div>
                      </div>
                      <div>
-                         <label style={{fontSize: '0.75em', color: '#888'}}>Clutter (m)</label>
+                         <label style={{fontSize: '0.75em', color: '#888', display: 'block', marginBottom: '4px'}}>
+                             Clutter Height (m)
+                         </label>
                          <input 
                             type="number" 
                             step="1"
                             value={clutterHeight}
                             onChange={(e) => setClutterHeight(parseFloat(e.target.value))}
-                            style={{...inputStyle, padding: '2px 4px', fontSize: '0.85em'}}
+                            style={{...inputStyle, padding: '6px', fontSize: '0.9em'}}
                          />
                      </div>
-                 </div>
-                 <div style={{fontSize: '0.7em', color: '#666', marginTop: '4px', fontStyle: 'italic'}}>
-                     K=1.33 Standard, K=1.0 Bare Earth
                  </div>
              </div>
 
